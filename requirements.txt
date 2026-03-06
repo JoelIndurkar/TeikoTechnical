@@ -1,0 +1,8 @@
+pandas
+scipy
+matplotlib
+seaborn
+flask
+flask-cors
+fastapi
+uvicorn
