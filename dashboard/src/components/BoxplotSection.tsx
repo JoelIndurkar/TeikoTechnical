@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import html2canvas from 'html2canvas'
 
 // Design choices:
 // - hand-rolled SVG gives full control over layout and avoids the black-box rendering
@@ -45,11 +47,9 @@ const popLabels: Record<string, string> = {
   monocyte:  'Monocyte',
 }
 
-function sigAsterisks(p: number): string {
-  if (p < 0.001) return '***'
-  if (p < 0.01)  return '**'
-  if (p < 0.05)  return '*'
-  return 'ns'
+// single threshold: significant or not
+function sigLabel(p: number): string {
+  return p < 0.05 ? 'SIG' : 'NS'
 }
 
 const SVG_H = 170
@@ -113,7 +113,51 @@ function BoxplotModal({ popKey, vals, stat, onClose }: {
   const rStats = calcStats(rVals)
   const nStats = calcStats(nVals)
   const isSig  = stat.significant
-  const asterisks = sigAsterisks(stat.pValue)
+  // ref on the SVG container - html2canvas captures this element as PNG
+  const plotRef = useRef<HTMLDivElement>(null)
+  const [downloading, setDownloading] = useState(false)
+
+  async function downloadPNG() {
+    if (!plotRef.current || downloading) return
+    setDownloading(true)
+    try {
+      const rootStyle = getComputedStyle(document.documentElement)
+      // html2canvas doesn't resolve CSS custom properties in SVG attributes
+      // onclone walks the cloned element and replaces var(--x) with computed values
+      const canvas = await html2canvas(plotRef.current, {
+        scale: 2,
+        logging: false,
+        backgroundColor: rootStyle.getPropertyValue('--card-bg').trim() || '#ffffff',
+        onclone: (_doc, el) => {
+          el.querySelectorAll('*').forEach(node => {
+            // resolve vars in SVG presentation attributes
+            const svgAttrs = ['stroke', 'fill', 'color', 'stop-color']
+            svgAttrs.forEach(attr => {
+              const val = node.getAttribute(attr)
+              if (val && val.includes('var(')) {
+                node.setAttribute(attr, val.replace(/var\(([^)]+)\)/g, (_, name) =>
+                  rootStyle.getPropertyValue(name.trim()).trim() || 'transparent'
+                ))
+              }
+            })
+            // resolve vars in inline style strings
+            const styleVal = node.getAttribute('style')
+            if (styleVal && styleVal.includes('var(')) {
+              node.setAttribute('style', styleVal.replace(/var\(([^)]+)\)/g, (_, name) =>
+                rootStyle.getPropertyValue(name.trim()).trim() || ''
+              ))
+            }
+          })
+        },
+      })
+      const link = document.createElement('a')
+      link.download = `${popKey}_boxplot.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const M_H = 300
   const M_W = 280
@@ -172,23 +216,48 @@ function BoxplotModal({ popKey, vals, stat, onClose }: {
           position: 'relative',
         }}
       >
-        {/* close button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute', top: 16, right: 16,
-            background: 'none', border: '1px solid var(--border)',
-            borderRadius: 6, width: 28, height: 28,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', color: 'var(--text-tertiary)',
-            fontSize: 14, lineHeight: 1,
-            transition: 'all var(--transition)',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--row-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)' }}
-        >
-          x
-        </button>
+        {/* top-right button group: PNG download + close */}
+        <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 6 }}>
+          {/* PNG download button */}
+          <button
+            onClick={downloadPNG}
+            disabled={downloading}
+            style={{
+              background: 'none', border: '1px solid var(--border)',
+              borderRadius: 6, width: 28, height: 28,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: downloading ? 'default' : 'pointer',
+              color: downloading ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+              opacity: downloading ? 0.5 : 1,
+              transition: 'all var(--transition)',
+            }}
+            title="Download as PNG"
+            onMouseEnter={e => { if (!downloading) { (e.currentTarget as HTMLButtonElement).style.background = 'var(--row-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' } }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+          {/* close button */}
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: '1px solid var(--border)',
+              borderRadius: 6, width: 28, height: 28,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--text-tertiary)',
+              fontSize: 14, lineHeight: 1,
+              transition: 'all var(--transition)',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--row-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary)' }}
+          >
+            x
+          </button>
+        </div>
 
         {/* header */}
         <div style={{ marginBottom: 20 }}>
@@ -209,8 +278,8 @@ function BoxplotModal({ popKey, vals, stat, onClose }: {
 
         {/* main content: boxplot + table side by side */}
         <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          {/* larger boxplot */}
-          <div style={{ flex: '0 0 auto' }}>
+          {/* larger boxplot - ref here so html2canvas captures just the chart */}
+          <div ref={plotRef} style={{ flex: '0 0 auto', background: 'var(--card-bg)', padding: '8px 8px 4px' }}>
             <svg width={M_W} height={M_H} viewBox={`0 0 ${M_W} ${M_H}`} style={{ display: 'block' }}>
               {ticks.map((t, i) => {
                 const y = scale(t)
@@ -257,11 +326,12 @@ function BoxplotModal({ popKey, vals, stat, onClose }: {
                   p = {stat.pValue < 0.001 ? stat.pValue.toExponential(1) : stat.pValue.toFixed(4)}
                 </span>
                 <span style={{
-                  fontSize: 16,
+                  fontSize: 11,
                   fontWeight: 700,
-                  color: isSig ? '#059669' : 'var(--text-tertiary)',
+                  color: isSig ? '#059669' : 'var(--not-significant)',
+                  letterSpacing: '0.06em',
                 }}>
-                  {asterisks}
+                  {isSig ? 'SIG' : 'NS'}
                 </span>
               </div>
               <div style={{ fontSize: 10.5, color: isSig ? '#059669' : 'var(--text-tertiary)' }}>
@@ -307,6 +377,88 @@ function BoxplotModal({ popKey, vals, stat, onClose }: {
   )
 }
 
+interface TooltipState {
+  group: 'responder' | 'non_responder'
+  stats: BoxStats
+  n: number
+  x: number
+  y: number
+}
+
+function BoxTooltip({ tip, popKey }: { tip: TooltipState; popKey: string }) {
+  const statRows: [string, number][] = [
+    ['Min',    tip.stats.min],
+    ['Q1',     tip.stats.q1],
+    ['Median', tip.stats.median],
+    ['Q3',     tip.stats.q3],
+    ['Max',    tip.stats.max],
+  ]
+  const isResponder = tip.group === 'responder'
+  const groupColor = isResponder ? 'var(--data-blue)' : 'var(--not-significant)'
+
+  // keep tooltip on screen flip left if too close to right edge
+  const offX = tip.x + 170 > window.innerWidth ? -174 : 14
+
+  return (
+    <div style={{
+      position: 'fixed',
+      left: tip.x + offX,
+      top: tip.y - 24,
+      background: 'var(--card-bg)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: '10px 13px',
+      boxShadow: 'var(--shadow-md)',
+      zIndex: 400,
+      pointerEvents: 'none',
+      minWidth: 158,
+    }}>
+      {/* population name */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
+        {popLabels[popKey] ?? popKey}
+      </div>
+      {/* group label colored by R/NR */}
+      <div style={{ fontSize: 10, fontWeight: 600, color: groupColor, marginBottom: 8, letterSpacing: '0.03em' }}>
+        {isResponder ? 'Responder' : 'Non-Responder'}
+      </div>
+
+      {/* quartile rows */}
+      {statRows.map(([label, val]) => (
+        <div key={label} style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 18,
+          fontSize: 11,
+          lineHeight: 1.8,
+        }}>
+          <span style={{ color: 'var(--text-secondary)', fontWeight: label === 'Median' ? 600 : 400 }}>{label}</span>
+          <span style={{
+            fontFamily: "'DM Mono', monospace",
+            color: 'var(--text-primary)',
+            fontWeight: label === 'Median' ? 700 : 400,
+          }}>
+            {val.toFixed(2)}
+          </span>
+        </div>
+      ))}
+
+      {/* sample count separated by border to distinguish from stat rows */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 18,
+        fontSize: 11,
+        marginTop: 5,
+        paddingTop: 5,
+        borderTop: '1px solid var(--border)',
+      }}>
+        <span style={{ color: 'var(--text-tertiary)' }}>n</span>
+        <span style={{ fontFamily: "'DM Mono', monospace", color: 'var(--text-secondary)' }}>{tip.n}</span>
+      </div>
+    </div>
+  )
+}
+
 function PopChart({ popKey, vals, stat, onClick }: {
   popKey: string
   vals: PopVals
@@ -315,6 +467,12 @@ function PopChart({ popKey, vals, stat, onClick }: {
 }) {
   const rStats = calcStats(vals.responder)
   const nStats = calcStats(vals.non_responder)
+
+  // separate hovered-box state from cursor position
+  // position tracked on outer div w/ onMouseMove (reliable clientX/Y)
+  // hover identity tracked on each SVG <g> w. onMouseEnter/Leave
+  const [hoveredBox, setHoveredBox] = useState<{ group: 'responder' | 'non_responder'; stats: BoxStats; n: number } | null>(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
   const allVals = [rStats.min, nStats.min, rStats.max, nStats.max]
   const domainMin = Math.floor(Math.min(...allVals) * 0.85)
@@ -330,12 +488,18 @@ function PopChart({ popKey, vals, stat, onClick }: {
   const rCx = PAD.left + plotW * 0.30
   const nCx = PAD.left + plotW * 0.70
 
-  const asterisks = sigAsterisks(stat.pValue)
   const isSig = stat.significant
 
   return (
     <div
       onClick={onClick}
+      // track real cursor position here - div events give correct clientX/Y unlike SVG child elements
+      onMouseMove={e => setMousePos({ x: e.clientX, y: e.clientY })}
+      onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.02)'}
+      onMouseLeave={e => {
+        ;(e.currentTarget as HTMLDivElement).style.transform = 'scale(1)'
+        setHoveredBox(null)
+      }}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
         cursor: 'pointer',
@@ -343,10 +507,7 @@ function PopChart({ popKey, vals, stat, onClick }: {
         padding: '6px 4px',
         transition: 'transform 200ms ease',
         transform: 'scale(1)',
-        // scale-up on hover signals clickability without needing a visible button
       }}
-      onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.02)'}
-      onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.transform = 'scale(1)'}
       title={`Click to expand ${popLabels[popKey] ?? popKey}`}
     >
       {/* population label */}
@@ -360,7 +521,6 @@ function PopChart({ popKey, vals, stat, onClick }: {
         {popLabels[popKey] ?? popKey}
       </div>
 
-      {/* the box plot SVG */}
       <svg width="100%" viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ display: 'block' }}>
         {ticks.map((t, i) => {
           const y = scale(t)
@@ -379,8 +539,36 @@ function PopChart({ popKey, vals, stat, onClick }: {
         })}
         <text x={rCx} y={SVG_H - 5} textAnchor="middle" fontSize={8.5} fill="var(--data-blue)" fontWeight={600}>R</text>
         <text x={nCx} y={SVG_H - 5} textAnchor="middle" fontSize={8.5} fill="var(--not-significant)" fontWeight={600}>NR</text>
-        <SingleBox stats={rStats} cx={rCx} boxW={boxW} scale={scale} color="var(--data-blue)" />
-        <SingleBox stats={nStats} cx={nCx} boxW={boxW} scale={scale} color="var(--not-significant)" />
+
+        {/* responder box - invisible hit rect gives a bigger hover target than the thin whisker lines */}
+        <g
+          onMouseEnter={() => setHoveredBox({ group: 'responder', stats: rStats, n: vals.responder.length })}
+          onMouseLeave={() => setHoveredBox(null)}
+        >
+          <rect
+            x={rCx - boxW * 1.2}
+            y={scale(rStats.max) - 6}
+            width={boxW * 2.4}
+            height={scale(rStats.min) - scale(rStats.max) + 12}
+            fill="transparent"
+          />
+          <SingleBox stats={rStats} cx={rCx} boxW={boxW} scale={scale} color="var(--data-blue)" />
+        </g>
+
+        {/* non-responder box */}
+        <g
+          onMouseEnter={() => setHoveredBox({ group: 'non_responder', stats: nStats, n: vals.non_responder.length })}
+          onMouseLeave={() => setHoveredBox(null)}
+        >
+          <rect
+            x={nCx - boxW * 1.2}
+            y={scale(nStats.max) - 6}
+            width={boxW * 2.4}
+            height={scale(nStats.min) - scale(nStats.max) + 12}
+            fill="transparent"
+          />
+          <SingleBox stats={nStats} cx={nCx} boxW={boxW} scale={scale} color="var(--not-significant)" />
+        </g>
       </svg>
 
       {/* p-value badge directly under this chart so association is always clear */}
@@ -401,17 +589,24 @@ function PopChart({ popKey, vals, stat, onClick }: {
         }}>
           p = {stat.pValue < 0.001 ? stat.pValue.toExponential(1) : stat.pValue.toFixed(4)}
         </span>
-        {/* asterisk notation is the standard convention in clinical publications */}
         <span style={{
+          fontSize: 9.5,
           fontWeight: 700,
-          fontSize: isSig ? 13 : 11,
-          color: isSig ? '#059669' : 'var(--text-tertiary)',
-          letterSpacing: '-0.02em',
-          lineHeight: 1,
+          color: isSig ? '#059669' : 'var(--not-significant)',
+          letterSpacing: '0.06em',
         }}>
-          {asterisks}
+          {sigLabel(stat.pValue)}
         </span>
       </div>
+
+      {/* portal to body so position:fixed isn't affected by this div's CSS transform */}
+      {hoveredBox && createPortal(
+        <BoxTooltip
+          tip={{ ...hoveredBox, x: mousePos.x, y: mousePos.y }}
+          popKey={popKey}
+        />,
+        document.body
+      )}
     </div>
   )
 }
@@ -527,12 +722,11 @@ export default function BoxplotSection() {
           <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--not-significant)' }} />
           Non-Responder (NR)
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
-          <span style={{ fontWeight: 700, color: '#059669' }}>*</span>
-          <span>p&lt;0.05</span>
-          <span style={{ fontWeight: 700, color: '#059669', marginLeft: 6 }}>**</span>
-          <span>p&lt;0.01</span>
-          <span style={{ marginLeft: 4, color: 'var(--text-tertiary)' }}>ns = not significant</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-tertiary)' }}>
+          <span style={{ fontWeight: 700, color: '#059669', letterSpacing: '0.06em' }}>SIG</span>
+          <span>p &lt; 0.05</span>
+          <span style={{ marginLeft: 6, fontWeight: 700, letterSpacing: '0.06em' }}>NS</span>
+          <span>not significant</span>
         </div>
       </div>
 
