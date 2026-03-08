@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load data
+        run: python3 load_data.py
+
+      - name: Run backend tests
+        run: python3 -m pytest tests/ -v --cov=. --cov-report=term-missing
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: cd dashboard && npm install
+
+      - name: Run frontend tests
+        run: cd dashboard && npm run test:coverage
+
+  pipeline-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run make setup
+        run: make setup
+
+      - name: Run make pipeline
+        run: make pipeline
+
+      - name: Verify clinical_data.db was created
+        run: test -f clinical_data.db
+
+      - name: Verify output directory has files
+        run: test -n "$(ls -A output/)"
