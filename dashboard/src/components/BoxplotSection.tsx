@@ -542,6 +542,7 @@ function PopChart({ popKey, vals, stat, onClick }: {
 
         {/* responder box - invisible hit rect gives a bigger hover target than the thin whisker lines */}
         <g
+          data-testid={`${popKey}-responder-box`}
           onMouseEnter={() => setHoveredBox({ group: 'responder', stats: rStats, n: vals.responder.length })}
           onMouseLeave={() => setHoveredBox(null)}
         >
@@ -557,6 +558,7 @@ function PopChart({ popKey, vals, stat, onClick }: {
 
         {/* non-responder box */}
         <g
+          data-testid={`${popKey}-non-responder-box`}
           onMouseEnter={() => setHoveredBox({ group: 'non_responder', stats: nStats, n: vals.non_responder.length })}
           onMouseLeave={() => setHoveredBox(null)}
         >
