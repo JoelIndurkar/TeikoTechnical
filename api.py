@@ -20,6 +20,33 @@ def get_db():
     conn.row_factory = sqlite3.Row  # to access cols by name
     return conn
 
+@app.get("/api/schema-info")
+def get_schema_info(): # returns table names, columns, and row counts
+    conn = get_db()
+    try:
+        tables = [
+            {
+                "name": "subjects",
+                "columns": ["subject", "condition", "age", "sex"],
+            },
+            {
+                "name": "samples",
+                "columns": ["sample", "subject", "project", "sample_type", "time_from_treatment_start", "treatment", "response"],
+            },
+            {
+                "name": "cell_counts",
+                "columns": ["id", "sample", "population", "count"],
+            },
+        ]
+        for t in tables:
+            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {t['name']}").fetchone()
+            t["row_count"] = row["cnt"]
+    finally:
+        conn.close()
+
+    return {"tables": tables}
+
+
 @app.get("/api/summary")
 def get_summary(): # for ea sample, compute total count then ea population's count and %
     conn = get_db()

@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #f2f2f0;
+  --card-bg: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --accent: #e63946;
+  --accent-light: #fff0f1;
+  --accent-mid: rgba(230, 57, 70, 0.12);
+  --data-blue: #3d7fa3;
+  --data-blue-light: #e8f4f9;
+  --data-blue-mid: rgba(61, 127, 163, 0.15);
+  --border: #e8e8e6;
+  --border-strong: #d1d1ce;
+  --row-hover: #f9f9f8;
+  --significant: #059669;
+  --significant-light: #ecfdf5;
+  --not-significant: #9ca3af;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.03);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lift: 0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
+  --transition: 150ms ease;
+  --transition-slow: 250ms ease;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+h1, h2, h3 {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.mono {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.95em;
+}

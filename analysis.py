@@ -2,7 +2,7 @@ import os
 import sys
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # non-interactive backend
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -15,6 +15,8 @@ os.makedirs("output", exist_ok=True)
 
 
 def get_data(conn):
+    # pull everything into one flat df
+    # both joins needed since condition/sex on subjects and treatment/response are on samples
     query = """
         SELECT
             s.sample, s.subject, s.project, s.sample_type,
@@ -27,8 +29,8 @@ def get_data(conn):
     """
     return pd.read_sql_query(query, conn)
 
-
 def part2(df):
+    # freq table: for ea sample, total count + each pop's count and %
     totalCounts = df.groupby("sample")["count"].sum().rename("total_count")
     merged = df.merge(totalCounts, on="sample")
     merged["percentage"] = (merged["count"] / merged["total_count"]) * 100
@@ -37,16 +39,17 @@ def part2(df):
     print(f"Part 2: {len(result)} rows -> output/part2_summary.csv")
     return result
 
-
 def part3(df):
+    # filter -> melanoma + PBMC + miraclib, then cmp(responders,non-responders)
+    # response.notna() drops healthy subjects who have no treatment and no response val
     filtered = df[
         (df["condition"] == "melanoma") &
         (df["sample_type"] == "PBMC") &
         (df["treatment"] == "miraclib") &
         (df["response"].notna())
     ].copy()
-
-    totalCounts = filtered.groupby("sample")["count"].sum().rename("total_count")
+    
+    totalCounts = filtered.groupby("sample")["count"].sum().rename("total_count") # compute % within this filtered cohort (not global total)
     filtered = filtered.merge(totalCounts, on="sample")
     filtered["percentage"] = (filtered["count"] / filtered["total_count"]) * 100
 
@@ -56,6 +59,8 @@ def part3(df):
         popDf = filtered[filtered["population"] == pop]
         responders = popDf[popDf["response"] == "yes"]["percentage"]
         nonResponders = popDf[popDf["response"] == "no"]["percentage"]
+        # Mann-Whitney U: non-parametric (small/non-normal groups)
+        # alternative="two-sided" is explicit because scipy 1.7+ changed the default behavior
         stat, pVal = stats.mannwhitneyu(responders, nonResponders, alternative="two-sided")
         statsRows.append({
             "population": pop,
@@ -71,7 +76,7 @@ def part3(df):
 
     fig, axes = plt.subplots(1, len(populations), figsize=(4 * len(populations), 5))
     if len(populations) == 1:
-        axes = [axes]
+        axes = [axes]  # subplots returns a single Axes when n=1, need to wrap it
 
     for ax, pop in zip(axes, populations):
         popDf = filtered[filtered["population"] == pop]
@@ -89,15 +94,15 @@ def part3(df):
 
 
 def part4(df):
+   
     filtered = df[
         (df["condition"] == "melanoma") &
         (df["sample_type"] == "PBMC") &
         (df["treatment"] == "miraclib") &
         (df["time_from_treatment_start"] == 0)
-    ].copy()
+    ].copy() # same cohort as p3 but also restrict to time=0 (baseline samples only)
 
-    # unique samples for aggregate counts
-    uniqueSamples = filtered.drop_duplicates("sample")
+    uniqueSamples = filtered.drop_duplicates("sample") # filtered has 5 rows per sample (one per population), drop_duplicates to get sample-level counts
 
     print("\nPart 4 subset (melanoma, PBMC, miraclib, time=0):")
     print("  samples per project:")
@@ -110,6 +115,8 @@ def part4(df):
     filtered.to_csv("output/part4_subset.csv", index=False)
     print(f"\nPart 4: {len(uniqueSamples)} samples -> output/part4_subset.csv")
 
+    # avg B cells for male responders
+    # must keep PBMC+miraclib filter here
     avgBCell = filtered[
         (filtered["population"] == "b_cell") &
         (filtered["sex"] == "M") &
