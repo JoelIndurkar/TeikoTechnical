@@ -20,7 +20,6 @@ def get_db():
     conn.row_factory = sqlite3.Row  # to access cols by name
     return conn
 
-
 @app.get("/api/summary")
 def get_summary(): # for ea sample, compute total count then ea population's count and %
     conn = get_db()
@@ -42,18 +41,16 @@ def get_summary(): # for ea sample, compute total count then ea population's cou
             ) totals ON cc.sample = totals.sample
             ORDER BY cc.sample, cc.population
         """).fetchall()
-    finally:
+    finally:  # guarantee conn closes even if query fails
         conn.close()
 
     return [dict(row) for row in rows]
-
 
 @app.get("/api/boxplot-data")
 def get_boxplot_data(): # filter mel + PBMC + miraclib, compute %/population/sample
     conn = get_db()
     try:
-        # melanoma on subjects not samples
-        # join subjects to filter by condition
+        # treatment/response from samples, condition/sex from subjects
         rows = conn.execute("""
             SELECT
                 cc.population,
@@ -88,12 +85,11 @@ def get_boxplot_data(): # filter mel + PBMC + miraclib, compute %/population/sam
 
     return result
 
-
 @app.get("/api/stats")
 def get_stats(): # same filter as boxplot-data, Mann-Whitney U/population
     conn = get_db()
     try:
-        # unrounded here since mannwhitneyu works on raw floats
+        # unrounded bc mannwhitneyu works on raw floats
         rows = conn.execute("""
             SELECT
                 cc.population,
@@ -128,6 +124,7 @@ def get_stats(): # same filter as boxplot-data, Mann-Whitney U/population
     for pop, popData in sorted(groups.items()):
         uStat, pVal = stats.mannwhitneyu(
             popData["responder"], popData["non_responder"], alternative="two-sided"
+            # explicit two-sided: scipy 1.7+ changed the default so better to be explicit
         )
         # cast from numpy types since FastAPI can't serialize them directly
         result.append({
@@ -138,3 +135,76 @@ def get_stats(): # same filter as boxplot-data, Mann-Whitney U/population
         })
 
     return result
+
+@app.get("/api/subset")
+def get_subset(): # melanoma + PBMC + miraclib + time=0, Part 4 summary stats
+    conn = get_db()
+    try:
+        # samples per project
+        projRows = conn.execute("""
+            SELECT s.project, COUNT(*) AS cnt
+            FROM samples s
+            JOIN subjects sub ON s.subject = sub.subject
+            WHERE sub.condition = 'melanoma'
+              AND s.sample_type = 'PBMC'
+              AND s.treatment = 'miraclib'
+              AND s.time_from_treatment_start = 0
+            GROUP BY s.project
+        """).fetchall()
+
+        # healthy have null response so IN filters
+        # responder vs non counts 
+        respRows = conn.execute("""
+            SELECT s.response, COUNT(*) AS cnt
+            FROM samples s
+            JOIN subjects sub ON s.subject = sub.subject
+            WHERE sub.condition = 'melanoma'
+              AND s.sample_type = 'PBMC'
+              AND s.treatment = 'miraclib'
+              AND s.time_from_treatment_start = 0
+              AND s.response IN ('yes', 'no')
+            GROUP BY s.response
+        """).fetchall()
+
+        # male vs female counts
+        sexRows = conn.execute("""
+            SELECT sub.sex, COUNT(*) AS cnt
+            FROM samples s
+            JOIN subjects sub ON s.subject = sub.subject
+            WHERE sub.condition = 'melanoma'
+              AND s.sample_type = 'PBMC'
+              AND s.treatment = 'miraclib'
+              AND s.time_from_treatment_start = 0
+            GROUP BY sub.sex
+        """).fetchall()
+
+        # avg b cells for male responders only (not all samples in the subset)
+        # critical to keep sample_type=PBMC and treatment=miraclib in this subquery for accuracy
+        avgRow = conn.execute("""
+            SELECT ROUND(AVG(cc.count), 2) AS avg_b
+            FROM cell_counts cc
+            JOIN samples s ON cc.sample = s.sample
+            JOIN subjects sub ON s.subject = sub.subject
+            WHERE sub.condition = 'melanoma'
+              AND s.sample_type = 'PBMC'
+              AND s.treatment = 'miraclib'
+              AND s.time_from_treatment_start = 0
+              AND s.response = 'yes'
+              AND sub.sex = 'M'
+              AND cc.population = 'b_cell'
+        """).fetchone()
+    finally:
+        conn.close()
+
+    samplesPerProject = {r["project"]: r["cnt"] for r in projRows}
+    respCounts = {r["response"]: r["cnt"] for r in respRows}
+    sexCounts = {r["sex"]: r["cnt"] for r in sexRows}
+
+    return {
+        "samples_per_project": samplesPerProject,
+        "responder_count": respCounts.get("yes", 0),  # .get with default so missing group doesn't crash
+        "non_responder_count": respCounts.get("no", 0),
+        "male_count": sexCounts.get("M", 0),
+        "female_count": sexCounts.get("F", 0),
+        "avg_b_cells": avgRow["avg_b"],
+    }
