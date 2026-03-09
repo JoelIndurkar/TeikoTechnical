@@ -2,9 +2,9 @@
 
 A clinical trial dashboard built with FastAPI and React. 
 Cell count data from a CSV is...
--> parsed to populate a SQLite database
--> statistical analysis runs against that database
--> results are served through an API to an interactive dashboard for exploring immune cell populations across patient groups.
+- -> parsed to populate a SQLite database
+- -> statistical analysis runs against that database
+- -> results are served through an API to an interactive dashboard for exploring immune cell populations across patient groups.
 
 **Link to Dashboard:** http://localhost:5173
 
