@@ -41,6 +41,8 @@ samples      sample (PK), subject (FK), project, sample_type,
 cell_counts  id (PK), sample (FK), population, count
 ```
 
+---
+
 ### Design Choices
 
 **Schema/Data Management:**
