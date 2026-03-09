@@ -18,6 +18,7 @@ Cell count data from a CSV is...
 make setup      # install Python and Node dependencies
 make pipeline   # load data into SQLite and run analysis
 make dashboard  # start API server + React dev server
+make test       # run frontend/backend tests (already run on push/pull)
 ```
 
 **GitHub Codespaces:** both servers bind to `0.0.0.0` so forwarded ports work without any extra config.

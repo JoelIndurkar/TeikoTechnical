@@ -13,3 +13,4 @@ dashboard:
 
 test:
 	python3 -m pytest tests/ -v --cov=. --cov-report=term-missing
+	cd dashboard && npm run test:coverage
