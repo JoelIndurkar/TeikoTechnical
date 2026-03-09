@@ -66,7 +66,7 @@ cell_counts  id (PK), sample (FK), population, count
 - **Boxplots Visualization** Tooltip on boxplot hover to show stats, larger view when boxplot is clicked that include PNG upload. Added to make the graph analysis experience smoother to view and share the data. Recharts for visualization.
 
 **Testing:**
-- **Added testing suites to CI (Github Actions) to verify functionality of the API and frontend design and to provide a baseline for future development. 100% coverage across frontend and backend. 
+- **Added testing suites to CI (Github Actions)** to verify functionality of the API and frontend design and to provide a baseline for future development. 100% coverage across frontend and backend. 
 
 ---
 
