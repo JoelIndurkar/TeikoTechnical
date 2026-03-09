@@ -67,7 +67,7 @@ dashboard/
 output/             generated CSV tables and PNG plots (from make pipeline)
 ```
 
-The pipeline and the API are intentionally separate. `load_data.py` and `analysis.py` run once to build the database and write static outputs. The API reads from that database at request time. This separation allows the dashboard to support dynamic filtering - changing condition, treatment, or sample type - without re-running the analysis.
+The pipeline and the API are intentionally separate. `load_data.py` and `analysis.py` run once to build the database and write static outputs. The API reads from that database at request time. This separation allows the dashboard to support dynamic filtering (changing condition, treatment, or sample type) without re-computing the analysis.
 
 The frontend has no business logic. All aggregation and statistical computation happens in the backend. The React components handle rendering and interaction; the API handles the numbers.
 
